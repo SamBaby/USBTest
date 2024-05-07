@@ -49,13 +49,13 @@ public class UsbConnector {
     public Hashtable<String, UsbConnectionContext> UsbConnections = new Hashtable<>();
     public void ToastShow(String txt){
         if(DEBUG) {
-//            final String _txt = txt;
-//            ParentActivity.runOnUiThread(new Runnable() {
-//                @Override
-//                public void run() {
-//                    Toast.makeText(ParentActivity, _txt, Toast.LENGTH_SHORT).show();
-//                }
-//            });
+            final String _txt = txt;
+            ParentActivity.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(ParentActivity, _txt, Toast.LENGTH_SHORT).show();
+                }
+            });
             Log.d("UsbConnector", txt);
         }
 
@@ -171,7 +171,8 @@ public class UsbConnector {
             } else {
                 ToastShow(String.format("ConnectUsb has NO Permission"));
                 ctx.waitPermission = true;
-                ctx.manager.requestPermission(ctx.mUsbDevice, mPermissionIntent);
+                PendingIntent permissionIntent = PendingIntent.getBroadcast(ParentActivity, 0, new Intent("com.example.USB_PERMISSION"), 0);
+                ctx.manager.requestPermission(ctx.mUsbDevice, permissionIntent);
                 ctx.valid=false;
             }
             return ctx;

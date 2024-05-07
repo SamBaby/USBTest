@@ -96,7 +96,26 @@
         <TextView
             android:id="@+id/machine_textView"
             android:layout_width="match_parent"
-            android:layout_height="375dp" />
+            android:layout_height="70dp" />
+        <Button
+            android:id="@+id/invoice_issue_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="開立發票" />
+        <TextView
+            android:id="@+id/invoice_textView"
+            android:layout_width="match_parent"
+            android:layout_height="70dp"/>
+        <Button
+            android:id="@+id/invoice_print_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="列印發票" />
+        <ImageView
+            android:id="@+id/image"
+            android:layout_width="match_parent"
+            android:layout_height="128dp"></ImageView>
     </LinearLayout>
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>
