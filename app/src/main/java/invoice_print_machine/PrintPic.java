@@ -46,7 +46,7 @@ public class PrintPic {
 
     public void drawImage(Bitmap btm) {
         try {
-            this.canvas.drawBitmap(btm, 0, 0, this.paint);
+            this.bm = btm;
             if (this.length < 0 + (float)btm.getHeight()) {
                 this.length = 0 + (float)btm.getHeight();
             }
@@ -87,7 +87,7 @@ public class PrintPic {
         if (this.getLength() == 0) {
             return null;
         } else {
-            Bitmap nbm = Bitmap.createBitmap(this.bm, 0, 0, this.width, this.getLength());
+            Bitmap nbm = this.bm;
             byte[] imgbuf = new byte[this.width / 8 * this.getLength()];
             int s = 0;
 

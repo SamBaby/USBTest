@@ -2,6 +2,8 @@ package com.example.usbtest;
 
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -22,6 +24,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
@@ -33,10 +36,13 @@ import com.google.gson.GsonBuilder;
 
 import org.json.JSONObject;
 
+import java.net.Socket;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 
 import javax.crypto.Cipher;
@@ -174,8 +180,13 @@ public class MainActivity extends AppCompatActivity {
             invoiceIssue();
         });
         btnInvoicePrint.setOnClickListener(v -> {
-//            invoiceMachinePrint();
             invoicePrint(merchantID, key, IV, invoiceNo, invoiceDate);
+        });
+        TextView image = findViewById(R.id.image);
+        image.setOnClickListener(v -> {
+            String text = image.getText().toString();
+            copyToClipboard(text);
+            Toast.makeText(MainActivity.this, "已經複製到剪貼簿", Toast.LENGTH_SHORT).show();
         });
     }
 
@@ -270,7 +281,9 @@ public class MainActivity extends AppCompatActivity {
 
     public void invoiceIssue() {
         new Thread(() -> {
-            long unixTime = System.currentTimeMillis() / 1000L;
+            Date currentTime = Calendar.getInstance().getTime();
+//            long unixTime = System.currentTimeMillis() / 1000L;
+            long unixTime = currentTime.getTime();
             EnvoiceData data = new EnvoiceData();
             data.setMerchantID("2000132");
             data.setRelateNumber("Samuel" + String.valueOf(unixTime));
@@ -377,7 +390,7 @@ public class MainActivity extends AppCompatActivity {
 
                                     @Override
                                     public void onNewPicture(WebView view, @Nullable Picture picture) {
-                                        if (print && view.getHeight() > 0 && view.getWidth() > 0) {
+                                        if (print && view.getHeight() > 0 && view.getWidth() >= 100) {
                                             view.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                                                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
                                             view.layout(0, 0, view.getMeasuredWidth(), view.getMeasuredHeight());
@@ -389,17 +402,17 @@ public class MainActivity extends AppCompatActivity {
                                             invoiceMachinePrint(bitmap);
                                             view.setVisibility(View.GONE);
                                             print = false;
-                                        } else {
+                                        } else if (print) {
                                             view.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                                                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
                                             view.layout(0, 0, view.getMeasuredWidth(), view.getMeasuredHeight());
                                         }
+
                                     }
                                 });
                                 // 启用 JavaScript
                                 WebSettings webSettings = view.getSettings();
                                 webSettings.setJavaScriptEnabled(true);
-
 
                                 // 加载 HTML 内容
                                 view.loadUrl(url);
@@ -496,40 +509,83 @@ public class MainActivity extends AppCompatActivity {
         if (cxt != null) {
             try {
                 runOnUiThread(() -> {
-                    ImageView image = findViewById(R.id.image);
-                    image.setImageBitmap(scaledBitmap);
                     int s = 0, index = 0;
-                    PrintPic pg = new PrintPic();
-                    pg.initCanvas(scaledBitmap.getWidth());
-                    pg.initPaint();
-                    pg.drawImage(scaledBitmap);
-                    byte[] sendData = pg.printDraw();
-                    byte[] temp = new byte[8 + 3 + (pg.getWidth() / 8 + 1 + 7) * (pg.getLength() + 1)];
-                    temp[index++] = 0x1D;
-                    temp[index++] = 0x76;
-                    temp[index++] = 0x30;
-                    temp[index++] = 0x00;
-                    temp[index++] = (byte) (pg.getWidth() / 8 + 1 + 7);
-                    temp[index++] = 0x02;
-                    temp[index++] = (byte) 0xD1;
-                    temp[index++] = 0x00;
-                    for (int i = 0; i < pg.getLength(); i++) {
-                        for (int j = 0; j < 7; j++) {
-                            temp[index++] = 0x00;
+                    byte[] sendData = printDraw(scaledBitmap);
+                    byte[] temp = new byte[8 + (targetWidth / 8)];
+                    byte[] reset = new byte[2];
+                    reset[0] = 0x1B;
+                    reset[1] = 0x40;
+                    byte[] position = new byte[4];
+                    position[0] = 0x1B;
+                    position[1] = 0x24;
+                    position[2] = 0x40;
+                    position[3] = 0x00;
+                    byte[] cut = new byte[2];
+                    cut[0] = 0x1B;
+                    cut[1] = 0x6D;
+                    byte[] blank = new byte[3];
+                    blank[0] = 0x1B;
+                    blank[1] = 0x4A;
+                    blank[2] = 0x50;
+                    byte[] rollForward = new byte[3];
+                    rollForward[0] = 0x1B;
+                    rollForward[1] = 0x4A;
+                    rollForward[2] = 0x05;
+                    connector.WriteBytes(cxt, rollForward, 0);
+                    for (int i = 0; i < targetHeight; i++) {
+                        //clear register
+                        if (i % 240 == 0) {
+                            try {
+                                Thread.sleep(500);
+                            } catch (Exception ee) {
+                                ee.printStackTrace();
+                            }
+                            connector.WriteBytes(cxt, reset, 0);
                         }
-                        for (int j = 0; j < (pg.getWidth() / 8); j++) {
+                        index = 0;
+                        temp[index++] = 0x1D;
+                        temp[index++] = 0x76;
+                        temp[index++] = 0x30;
+                        temp[index++] = 0x00;
+                        temp[index++] = (byte) (targetWidth / 8);
+                        temp[index++] = 0x00;
+                        temp[index++] = (byte) 0x01;
+                        temp[index++] = 0x00;
+                        for (int j = 0; j < (targetWidth / 8); j++) {
                             temp[index++] = sendData[s++];
                         }
-                        temp[index++] = 0x00;
+                        //reset position and print line
+                        connector.WriteBytes(cxt, position, 0);
+                        connector.WriteBytes(cxt, temp, 0);
                     }
-                    for (int j = 0; j <= (pg.getWidth() / 8 + 7); j++) {
-                        temp[index++] = 0x00;
+                    //print 50 blank lines
+                    connector.WriteBytes(cxt, blank, 0);
+                    //cut paper
+                    try {
+                        Thread.sleep(2000);
+                    } catch (Exception ee) {
+                        ee.printStackTrace();
                     }
-                    temp[index++] = 0x1B;
-                    temp[index++] = 0x4A;
-                    temp[index++] = (byte) 0xDC;
-                    connector.WriteBytes(cxt, temp, 0);
+                    connector.WriteBytes(cxt, cut, 0);
+                    //roll back paper 50 pixels
+                    try {
+                        Thread.sleep(2000);
+                    } catch (Exception ee) {
+                        ee.printStackTrace();
+                    }
+                    byte[] rollback = new byte[3];
+                    rollback[0] = 0x1B;
+                    rollback[1] = 0x6A;
+                    rollback[2] = 0x60;
+                    connector.WriteBytes(cxt, rollback, 0);
+                    try {
+                        Thread.sleep(500);
+                    } catch (Exception ee) {
+                        ee.printStackTrace();
+                    }
+                    connector.WriteBytes(cxt, reset, 0);
                 });
+
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -606,6 +662,134 @@ public class MainActivity extends AppCompatActivity {
     public String ECPayDecrypt(String data) {
         String aesDecrypt = decrypt(algorithm, data, new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "AES"), new IvParameterSpec(IV.getBytes(StandardCharsets.UTF_8)));
         return decode(aesDecrypt);
+    }
+
+    public byte[] printDraw(Bitmap nbm) {
+        if (nbm.getHeight() == 0) {
+            return null;
+        } else {
+            byte[] imgbuf = new byte[nbm.getWidth() / 8 * nbm.getHeight()];
+            int s = 0;
+            byte[] bitbuf = new byte[nbm.getWidth() / 8];
+            try {
+                for (int i = 0; i < nbm.getHeight(); ++i) {
+                    int k;
+                    for (k = 0; k < nbm.getWidth() / 8; ++k) {
+                        int c0 = nbm.getPixel(k * 8 + 0, i);
+                        byte p0;
+                        if (c0 == -1) {
+                            p0 = 0;
+                        } else {
+                            p0 = 1;
+                        }
+
+                        int c1 = nbm.getPixel(k * 8 + 1, i);
+                        byte p1;
+                        if (c1 == -1) {
+                            p1 = 0;
+                        } else {
+                            p1 = 1;
+                        }
+
+                        int c2 = nbm.getPixel(k * 8 + 2, i);
+                        byte p2;
+                        if (c2 == -1) {
+                            p2 = 0;
+                        } else {
+                            p2 = 1;
+                        }
+
+                        int c3 = nbm.getPixel(k * 8 + 3, i);
+                        byte p3;
+                        if (c3 == -1) {
+                            p3 = 0;
+                        } else {
+                            p3 = 1;
+                        }
+
+                        int c4 = nbm.getPixel(k * 8 + 4, i);
+                        byte p4;
+                        if (c4 == -1) {
+                            p4 = 0;
+                        } else {
+                            p4 = 1;
+                        }
+
+                        int c5 = nbm.getPixel(k * 8 + 5, i);
+                        byte p5;
+                        if (c5 == -1) {
+                            p5 = 0;
+                        } else {
+                            p5 = 1;
+                        }
+
+                        int c6 = nbm.getPixel(k * 8 + 6, i);
+                        byte p6;
+                        if (c6 == -1) {
+                            p6 = 0;
+                        } else {
+                            p6 = 1;
+                        }
+
+                        int c7 = nbm.getPixel(k * 8 + 7, i);
+                        byte p7;
+                        if (c7 == -1) {
+                            p7 = 0;
+                        } else {
+                            p7 = 1;
+                        }
+
+                        int value = p0 * 128 + p1 * 64 + p2 * 32 + p3 * 16 + p4 * 8 + p5 * 4 + p6 * 2 + p7;
+                        bitbuf[k] = (byte) value;
+                    }
+                    for (k = 0; k < nbm.getWidth() / 8; ++k) {
+                        imgbuf[s] = bitbuf[k];
+                        ++s;
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            return imgbuf;
+        }
+    }
+
+    public Bitmap hexToBitmap(byte[] bytes, int w, int h) {
+        Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_4444);
+        int s = 0;
+        try {
+            for (int i = 0; i < bitmap.getHeight(); ++i) {
+                for (int k = 0; k < bitmap.getWidth() / 8; ++k) {
+                    byte b = bytes[s];
+                    s++;
+                    String s1 = String.format("%8s", Integer.toBinaryString(b & 0xFF)).replace(' ', '0');
+                    char[] chars = s1.toCharArray();
+                    for (int j = 0; j < chars.length; j++) {
+                        char c = chars[j];
+                        if (c == '1') {
+                            bitmap.setPixel(k * 8 + j, i, 0xFF000000);
+                        } else {
+                            bitmap.setPixel(k * 8 + j, i, 0xFFFFFFFF);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return bitmap;
+    }
+
+    private void copyToClipboard(String text) {
+        // 获取剪贴板管理器
+        ClipboardManager clipboardManager = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+
+        // 创建 ClipData 对象
+        ClipData clipData = ClipData.newPlainText("text", text);
+
+        // 将 ClipData 对象放入剪贴板
+        clipboardManager.setPrimaryClip(clipData);
     }
 }
 
