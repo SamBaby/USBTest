@@ -182,12 +182,12 @@ public class MainActivity extends AppCompatActivity {
         btnInvoicePrint.setOnClickListener(v -> {
             invoicePrint(merchantID, key, IV, invoiceNo, invoiceDate);
         });
-        TextView image = findViewById(R.id.image);
-        image.setOnClickListener(v -> {
-            String text = image.getText().toString();
-            copyToClipboard(text);
-            Toast.makeText(MainActivity.this, "已經複製到剪貼簿", Toast.LENGTH_SHORT).show();
-        });
+//        TextView image = findViewById(R.id.image);
+//        image.setOnClickListener(v -> {
+//            String text = image.getText().toString();
+//            copyToClipboard(text);
+//            Toast.makeText(MainActivity.this, "已經複製到剪貼簿", Toast.LENGTH_SHORT).show();
+//        });
     }
 
     private void findAndOpenDevice() {
@@ -402,6 +402,7 @@ public class MainActivity extends AppCompatActivity {
                                             invoiceMachinePrint(bitmap);
                                             view.setVisibility(View.GONE);
                                             print = false;
+                                            view.destroy();
                                         } else if (print) {
                                             view.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                                                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
@@ -506,7 +507,9 @@ public class MainActivity extends AppCompatActivity {
 
         // 缩放 Bitmap
         Bitmap scaledBitmap = Bitmap.createScaledBitmap(invoicePic, targetWidth, targetHeight, false);
-        if (cxt != null) {
+        ImageView view = findViewById(R.id.image);
+        view.setImageBitmap(scaledBitmap);
+        if (true) {
             try {
                 runOnUiThread(() -> {
                     int s = 0, index = 0;
@@ -531,16 +534,11 @@ public class MainActivity extends AppCompatActivity {
                     rollForward[0] = 0x1B;
                     rollForward[1] = 0x4A;
                     rollForward[2] = 0x05;
-                    connector.WriteBytes(cxt, rollForward, 0);
+//                    connector.WriteBytes(cxt, rollForward, 0);
                     for (int i = 0; i < targetHeight; i++) {
                         //clear register
                         if (i % 240 == 0) {
-                            try {
-                                Thread.sleep(500);
-                            } catch (Exception ee) {
-                                ee.printStackTrace();
-                            }
-                            connector.WriteBytes(cxt, reset, 0);
+//                            connector.WriteBytes(cxt, reset, 0);
                         }
                         index = 0;
                         temp[index++] = 0x1D;
@@ -555,35 +553,20 @@ public class MainActivity extends AppCompatActivity {
                             temp[index++] = sendData[s++];
                         }
                         //reset position and print line
-                        connector.WriteBytes(cxt, position, 0);
-                        connector.WriteBytes(cxt, temp, 0);
+//                        connector.WriteBytes(cxt, position, 0);
+//                        connector.WriteBytes(cxt, temp, 0);
                     }
                     //print 50 blank lines
-                    connector.WriteBytes(cxt, blank, 0);
+//                    connector.WriteBytes(cxt, blank, 0);
                     //cut paper
-                    try {
-                        Thread.sleep(2000);
-                    } catch (Exception ee) {
-                        ee.printStackTrace();
-                    }
-                    connector.WriteBytes(cxt, cut, 0);
+//                    connector.WriteBytes(cxt, cut, 0);
                     //roll back paper 50 pixels
-                    try {
-                        Thread.sleep(2000);
-                    } catch (Exception ee) {
-                        ee.printStackTrace();
-                    }
                     byte[] rollback = new byte[3];
                     rollback[0] = 0x1B;
                     rollback[1] = 0x6A;
                     rollback[2] = 0x60;
-                    connector.WriteBytes(cxt, rollback, 0);
-                    try {
-                        Thread.sleep(500);
-                    } catch (Exception ee) {
-                        ee.printStackTrace();
-                    }
-                    connector.WriteBytes(cxt, reset, 0);
+//                    connector.WriteBytes(cxt, rollback, 0);
+//                    connector.WriteBytes(cxt, reset, 0);
                 });
 
             } catch (Exception e) {
