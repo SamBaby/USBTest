@@ -109,6 +109,16 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="列印發票" />
+        <Button
+            android:id="@+id/QR_code_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="列印QR" />
+        <Button
+            android:id="@+id/machine_status_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="印表機狀態" />
         <ScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent">

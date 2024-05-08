@@ -24,7 +24,6 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
@@ -36,7 +35,6 @@ import com.google.gson.GsonBuilder;
 
 import org.json.JSONObject;
 
-import java.net.Socket;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -57,7 +55,6 @@ import ecpay.EnvoiceJson;
 import ecpay.InvoicePrintJson;
 import ecpay.RqHeader;
 import ecpay.TaxIDCheckJson;
-import invoice_print_machine.PrintPic;
 import usb.UsbConnectionContext;
 import usb.UsbConnector;
 
@@ -65,7 +62,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String key = "ejCk326UnaZWKisg";
     private static final String IV = "q9jcZX8Ib9LM8wYk";
     private static final String algorithm = "AES/CBC/PKCS7Padding";
-    private static final String merchantID = "2000132";
+    private static final String merchantID = "3085340";
     private static final String TAG = "USBTest";
 
     /* USB system service */
@@ -80,6 +77,8 @@ public class MainActivity extends AppCompatActivity {
     private Button btnSend;
     private Button btnInvoiceIssue;
     private Button btnInvoicePrint;
+    private Button btnQRPrint;
+    private Button btnStatus;
     private TextView txtConnect;
     private TextView txtInput;
     private EditText txtOutput;
@@ -106,6 +105,8 @@ public class MainActivity extends AppCompatActivity {
         btnSend = (Button) findViewById(R.id.send_button);
         btnInvoiceIssue = findViewById(R.id.invoice_issue_button);
         btnInvoicePrint = findViewById(R.id.invoice_print_button);
+        btnQRPrint = findViewById(R.id.QR_code_button);
+        btnStatus = findViewById(R.id.machine_status_button);
         txtConnect = (TextView) findViewById(R.id.connectText);
         txtInput = (TextView) findViewById(R.id.input);
         txtOutput = (EditText) findViewById(R.id.output_editText);
@@ -181,6 +182,12 @@ public class MainActivity extends AppCompatActivity {
         });
         btnInvoicePrint.setOnClickListener(v -> {
             invoicePrint(merchantID, key, IV, invoiceNo, invoiceDate);
+        });
+        btnQRPrint.setOnClickListener(v -> {
+            qrPrint("http://www.google.com");
+        });
+        btnStatus.setOnClickListener(v -> {
+            printMachineStatus();
         });
 //        TextView image = findViewById(R.id.image);
 //        image.setOnClickListener(v -> {
@@ -500,6 +507,68 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
+    public void printMachineStatus() {
+        if (cxt != null) {
+            byte[] status = new byte[]{0x10, 0x04, 0x04};
+            connector.WriteBytes(cxt, status, 0);
+        }
+    }
+
+    public void qrPrint(String text) {
+        if (cxt != null) {
+            byte[] size = new byte[]{0x1D, 0x01, 0x03, 0x0A};
+            byte[] faultLevel = new byte[]{0x1D, 0x01, 0x04, 0x32};
+            byte[] length = new byte[]{0x1D, 0x01, 0x01, (byte) text.length(), 0x00};
+            byte[] print = new byte[]{0x1D, 0x01, 0x02};
+            byte[] line = new byte[]{0x0A};
+            byte[] content = new byte[text.length()];
+            for (int i = 0; i < text.length(); i++) {
+                content[i] = (byte) text.charAt(i);
+            }
+            byte[] reset = new byte[2];
+            reset[0] = 0x1B;
+            reset[1] = 0x40;
+            byte[] position = new byte[4];
+            position[0] = 0x1B;
+            position[1] = 0x24;
+            position[2] = 0x50;
+            position[3] = 0x00;
+            byte[] cut = new byte[2];
+            cut[0] = 0x1B;
+            cut[1] = 0x6D;
+            byte[] blank = new byte[3];
+            blank[0] = 0x1B;
+            blank[1] = 0x4A;
+            blank[2] = (byte) 0xA0;
+            byte[] rollForward = new byte[3];
+            rollForward[0] = 0x1B;
+            rollForward[1] = 0x4A;
+            rollForward[2] = 0x05;
+            connector.WriteBytes(cxt, rollForward, 0);
+            connector.WriteBytes(cxt, reset, 0);
+
+            connector.WriteBytes(cxt, size, 0);
+            connector.WriteBytes(cxt, faultLevel, 0);
+            connector.WriteBytes(cxt, length, 0);
+            connector.WriteBytes(cxt, content, 0);
+            connector.WriteBytes(cxt, position, 0);
+            connector.WriteBytes(cxt, print, 0);
+            connector.WriteBytes(cxt, line, 0);
+
+            //print 50 blank lines
+            connector.WriteBytes(cxt, blank, 0);
+            //cut paper
+            connector.WriteBytes(cxt, cut, 0);
+            //roll back paper 60 pixels
+            byte[] rollback = new byte[3];
+            rollback[0] = 0x1B;
+            rollback[1] = 0x6A;
+            rollback[2] = 0x60;
+            connector.WriteBytes(cxt, rollback, 0);
+            connector.WriteBytes(cxt, reset, 0);
+        }
+    }
+
     public void invoiceMachinePrint(Bitmap invoicePic) {
         // 指定目标宽度和高度
         int targetWidth = 456;
@@ -509,7 +578,7 @@ public class MainActivity extends AppCompatActivity {
         Bitmap scaledBitmap = Bitmap.createScaledBitmap(invoicePic, targetWidth, targetHeight, false);
         ImageView view = findViewById(R.id.image);
         view.setImageBitmap(scaledBitmap);
-        if (true) {
+        if (cxt != null) {
             try {
                 runOnUiThread(() -> {
                     int s = 0, index = 0;
@@ -534,11 +603,11 @@ public class MainActivity extends AppCompatActivity {
                     rollForward[0] = 0x1B;
                     rollForward[1] = 0x4A;
                     rollForward[2] = 0x05;
-//                    connector.WriteBytes(cxt, rollForward, 0);
+                    connector.WriteBytes(cxt, rollForward, 0);
                     for (int i = 0; i < targetHeight; i++) {
                         //clear register
                         if (i % 240 == 0) {
-//                            connector.WriteBytes(cxt, reset, 0);
+                            connector.WriteBytes(cxt, reset, 0);
                         }
                         index = 0;
                         temp[index++] = 0x1D;
@@ -553,20 +622,20 @@ public class MainActivity extends AppCompatActivity {
                             temp[index++] = sendData[s++];
                         }
                         //reset position and print line
-//                        connector.WriteBytes(cxt, position, 0);
-//                        connector.WriteBytes(cxt, temp, 0);
+                        connector.WriteBytes(cxt, position, 0);
+                        connector.WriteBytes(cxt, temp, 0);
                     }
                     //print 50 blank lines
-//                    connector.WriteBytes(cxt, blank, 0);
+                    connector.WriteBytes(cxt, blank, 0);
                     //cut paper
-//                    connector.WriteBytes(cxt, cut, 0);
+                    connector.WriteBytes(cxt, cut, 0);
                     //roll back paper 50 pixels
                     byte[] rollback = new byte[3];
                     rollback[0] = 0x1B;
                     rollback[1] = 0x6A;
                     rollback[2] = 0x60;
-//                    connector.WriteBytes(cxt, rollback, 0);
-//                    connector.WriteBytes(cxt, reset, 0);
+                    connector.WriteBytes(cxt, rollback, 0);
+                    connector.WriteBytes(cxt, reset, 0);
                 });
 
             } catch (Exception e) {
