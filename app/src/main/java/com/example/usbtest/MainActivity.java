@@ -55,6 +55,7 @@ import ecpay.EnvoiceJson;
 import ecpay.InvoicePrintJson;
 import ecpay.RqHeader;
 import ecpay.TaxIDCheckJson;
+import invoice_print_machine.PrintCommand;
 import usb.UsbConnectionContext;
 import usb.UsbConnector;
 
@@ -189,12 +190,6 @@ public class MainActivity extends AppCompatActivity {
         btnStatus.setOnClickListener(v -> {
             printMachineStatus();
         });
-//        TextView image = findViewById(R.id.image);
-//        image.setOnClickListener(v -> {
-//            String text = image.getText().toString();
-//            copyToClipboard(text);
-//            Toast.makeText(MainActivity.this, "已經複製到剪貼簿", Toast.LENGTH_SHORT).show();
-//        });
     }
 
     private void findAndOpenDevice() {
@@ -218,43 +213,6 @@ public class MainActivity extends AppCompatActivity {
             txtMachine.setText(builder.toString());
         }
     }
-
-    private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (ACTION_USB_PERMISSION.equals(action)) {
-                synchronized (this) {
-                    device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                        if (device != null) {
-                            // Permission granted, you can now communicate with the device
-                            // Open a connection and send/receive data
-//                            txtConnect.setText("Connected");
-//                            txtConnect.setBackgroundColor(Color.GREEN);
-//                            reading = true;
-                            UsbDeviceConnection deviceConnection = usbManager.openDevice(device);
-                            for (int i = 0; i < device.getInterfaceCount(); i++) {
-                                UsbInterface usbInterface = device.getInterface(i);
-                                Log.d(TAG, "onReceive: ");
-                            }
-//                            new Thread(() -> {
-//                                while(true){
-//                                    UsbDeviceConnection deviceConnection = usbManager.openDevice(device);
-//                                    deviceConnection.claimInterface(usbInterface, true);
-//                                    byte[] maxLun = new byte[1];
-//                                    deviceConnection.controlTransfer(requestType,request, value, index, bytes, bytes.length, TIMEOUT);
-//                                    Log.d("","");
-//                                }
-//
-//                            }).start();
-                        }
-                    } else {
-                        // Permission denied
-                    }
-                }
-            }
-        }
-    };
 
     @Override
     protected void onDestroy() {
@@ -525,89 +483,41 @@ public class MainActivity extends AppCompatActivity {
             for (int i = 0; i < text.length(); i++) {
                 content[i] = (byte) text.charAt(i);
             }
-            byte[] reset = new byte[2];
-            reset[0] = 0x1B;
-            reset[1] = 0x40;
-            byte[] position = new byte[4];
-            position[0] = 0x1B;
-            position[1] = 0x24;
-            position[2] = 0x50;
-            position[3] = 0x00;
-            byte[] cut = new byte[2];
-            cut[0] = 0x1B;
-            cut[1] = 0x6D;
-            byte[] blank = new byte[3];
-            blank[0] = 0x1B;
-            blank[1] = 0x4A;
-            blank[2] = (byte) 0xA0;
-            byte[] rollForward = new byte[3];
-            rollForward[0] = 0x1B;
-            rollForward[1] = 0x4A;
-            rollForward[2] = 0x05;
-            connector.WriteBytes(cxt, rollForward, 0);
-            connector.WriteBytes(cxt, reset, 0);
+            connector.WriteBytes(cxt, PrintCommand.rollForward05, 0);
+            connector.WriteBytes(cxt, PrintCommand.reset, 0);
 
             connector.WriteBytes(cxt, size, 0);
             connector.WriteBytes(cxt, faultLevel, 0);
             connector.WriteBytes(cxt, length, 0);
             connector.WriteBytes(cxt, content, 0);
-            connector.WriteBytes(cxt, position, 0);
+            connector.WriteBytes(cxt, PrintCommand.position50, 0);
             connector.WriteBytes(cxt, print, 0);
             connector.WriteBytes(cxt, line, 0);
 
-            //print 50 blank lines
-            connector.WriteBytes(cxt, blank, 0);
-            //cut paper
-            connector.WriteBytes(cxt, cut, 0);
-            //roll back paper 60 pixels
-            byte[] rollback = new byte[3];
-            rollback[0] = 0x1B;
-            rollback[1] = 0x6A;
-            rollback[2] = 0x60;
-            connector.WriteBytes(cxt, rollback, 0);
-            connector.WriteBytes(cxt, reset, 0);
+            connector.WriteBytes(cxt, PrintCommand.blankA0, 0);
+            connector.WriteBytes(cxt, PrintCommand.cut, 0);
+            connector.WriteBytes(cxt, PrintCommand.rollback60, 0);
+            connector.WriteBytes(cxt, PrintCommand.reset, 0);
         }
     }
 
     public void invoiceMachinePrint(Bitmap invoicePic) {
-        // 指定目标宽度和高度
         int targetWidth = 456;
         int targetHeight = 720;
 
         // 缩放 Bitmap
         Bitmap scaledBitmap = Bitmap.createScaledBitmap(invoicePic, targetWidth, targetHeight, false);
-        ImageView view = findViewById(R.id.image);
-        view.setImageBitmap(scaledBitmap);
         if (cxt != null) {
             try {
                 runOnUiThread(() -> {
                     int s = 0, index = 0;
                     byte[] sendData = printDraw(scaledBitmap);
                     byte[] temp = new byte[8 + (targetWidth / 8)];
-                    byte[] reset = new byte[2];
-                    reset[0] = 0x1B;
-                    reset[1] = 0x40;
-                    byte[] position = new byte[4];
-                    position[0] = 0x1B;
-                    position[1] = 0x24;
-                    position[2] = 0x40;
-                    position[3] = 0x00;
-                    byte[] cut = new byte[2];
-                    cut[0] = 0x1B;
-                    cut[1] = 0x6D;
-                    byte[] blank = new byte[3];
-                    blank[0] = 0x1B;
-                    blank[1] = 0x4A;
-                    blank[2] = 0x50;
-                    byte[] rollForward = new byte[3];
-                    rollForward[0] = 0x1B;
-                    rollForward[1] = 0x4A;
-                    rollForward[2] = 0x05;
-                    connector.WriteBytes(cxt, rollForward, 0);
+
+                    connector.WriteBytes(cxt, PrintCommand.rollForward05, 0);
                     for (int i = 0; i < targetHeight; i++) {
-                        //clear register
                         if (i % 240 == 0) {
-                            connector.WriteBytes(cxt, reset, 0);
+                            connector.WriteBytes(cxt, PrintCommand.reset, 0);
                         }
                         index = 0;
                         temp[index++] = 0x1D;
@@ -621,21 +531,13 @@ public class MainActivity extends AppCompatActivity {
                         for (int j = 0; j < (targetWidth / 8); j++) {
                             temp[index++] = sendData[s++];
                         }
-                        //reset position and print line
-                        connector.WriteBytes(cxt, position, 0);
+                        connector.WriteBytes(cxt, PrintCommand.position40, 0);
                         connector.WriteBytes(cxt, temp, 0);
                     }
-                    //print 50 blank lines
-                    connector.WriteBytes(cxt, blank, 0);
-                    //cut paper
-                    connector.WriteBytes(cxt, cut, 0);
-                    //roll back paper 50 pixels
-                    byte[] rollback = new byte[3];
-                    rollback[0] = 0x1B;
-                    rollback[1] = 0x6A;
-                    rollback[2] = 0x60;
-                    connector.WriteBytes(cxt, rollback, 0);
-                    connector.WriteBytes(cxt, reset, 0);
+                    connector.WriteBytes(cxt, PrintCommand.blank50, 0);
+                    connector.WriteBytes(cxt, PrintCommand.cut, 0);
+                    connector.WriteBytes(cxt, PrintCommand.rollback60, 0);
+                    connector.WriteBytes(cxt, PrintCommand.reset, 0);
                 });
 
             } catch (Exception e) {
