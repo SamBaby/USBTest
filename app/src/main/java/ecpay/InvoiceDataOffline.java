@@ -1,30 +1,29 @@
 package ecpay;
 
-public class EnvoiceData {
-    private String MerchantID ="";
+public class InvoiceDataOffline {
+    private String MerchantID = "";
     private String MachineID = "";
     private String InvoiceNo = "";
-    private String InvoiceDate="";
-
-    private String RelateNumber="";
-    private String CustomerID="";
-    private String CustomerIdentifier;
-    private String CustomerName="";
-    private String CustomerAddr="";
-    private String CustomerPhone="";
-    private String CustomerEmail="";
-    private String ClearanceMark="";
+    private String InvoiceDate = "";
+    private String RelateNumber = "";
+    private String CustomerID = "";
+    private String CustomerIdentifier = "";
+    private String CustomerName = "";
+    private String CustomerAddr = "";
+    private String CustomerPhone = "";
+    private String CustomerEmail = "";
+    private String ClearanceMark = "";
     private String LoveCode = "";
     private String Print;
     private String Donation;
     private String CarrierType;
     private String CarrierNum;
-    private int TaxType;
+    private String TaxType;
     private int SalesAmount;
     private String InvType;
     private String vat;
     private String InvoiceRemark;
-    private int SpecialTaxType;
+    private String SpecialTaxType;
     private String RandomNumber;
     private EnvoiceItem[] Items;
 
@@ -84,11 +83,11 @@ public class EnvoiceData {
         CarrierNum = carrierNum;
     }
 
-    public int getTaxType() {
+    public String getTaxType() {
         return TaxType;
     }
 
-    public void setTaxType(int taxType) {
+    public void setTaxType(String taxType) {
         TaxType = taxType;
     }
 
@@ -180,11 +179,11 @@ public class EnvoiceData {
         LoveCode = loveCode;
     }
 
-    public int getSpecialTaxType() {
+    public String getSpecialTaxType() {
         return SpecialTaxType;
     }
 
-    public void setSpecialTaxType(int specialTaxType) {
+    public void setSpecialTaxType(String specialTaxType) {
         SpecialTaxType = specialTaxType;
     }
 

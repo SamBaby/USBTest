@@ -1,33 +1,31 @@
 package com.example.usbtest;
 
 import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Picture;
 import android.hardware.usb.UsbDevice;
-import android.hardware.usb.UsbDeviceConnection;
-import android.hardware.usb.UsbInterface;
 import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.util.Log;
+import android.os.Environment;
 import android.view.View;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
@@ -35,26 +33,28 @@ import com.google.gson.GsonBuilder;
 
 import org.json.JSONObject;
 
-import java.net.URLDecoder;
-import java.net.URLEncoder;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.HashMap;
-
-import javax.crypto.Cipher;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 
 import ecpay.BarcodeCheckJson;
 import ecpay.EcpayFunction;
 import ecpay.EnvoiceData;
 import ecpay.EnvoiceItem;
 import ecpay.EnvoiceJson;
+import ecpay.InvoiceDataOffline;
 import ecpay.InvoicePrintJson;
 import ecpay.RqHeader;
 import ecpay.TaxIDCheckJson;
+import icerapi.icerapi.ICERAPI;
 import invoice_print_machine.PrintCommand;
 import usb.UsbConnectionContext;
 import usb.UsbConnector;
@@ -140,7 +140,7 @@ public class MainActivity extends AppCompatActivity {
                     new Thread(() -> {
                         while (reading) {
                             try {
-                                byte[] bytes = connector.ReadBytes(cxt, 64, 10000);
+                                byte[] bytes = connector.ReadBytes(cxt, 2, 10000);
                                 if (bytes != null && bytes.length > 0) {
                                     String s = byteArrayToHexStr(bytes);
                                     runOnUiThread(() -> txtInput.setText("Input from USB: " + s));
@@ -179,10 +179,11 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         btnInvoiceIssue.setOnClickListener(v -> {
-            invoiceIssue();
+//            invoiceIssue();
+            invoiceIssueOffline("3085340", "SM01", algorithm, "HwiqPsywG1hLQNuN", "YqITWD4TyKacYXpn");
         });
         btnInvoicePrint.setOnClickListener(v -> {
-            invoicePrint(merchantID, key, IV, invoiceNo, invoiceDate);
+            invoicePrint("3085340", algorithm, "HwiqPsywG1hLQNuN", "YqITWD4TyKacYXpn", invoiceNo, invoiceDate);
         });
         btnQRPrint.setOnClickListener(v -> {
             qrPrint("http://www.google.com");
@@ -190,28 +191,114 @@ public class MainActivity extends AppCompatActivity {
         btnStatus.setOnClickListener(v -> {
             printMachineStatus();
         });
-    }
+        Button btnCoupon = findViewById(R.id.coupon_button);
+        btnCoupon.setOnClickListener(v -> {
+            try {
+                couponPrint("http://www.google.com");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+        Button btnICER = findViewById(R.id.icer_connect_button);
+        btnICER.setOnClickListener(v -> {
+            try {
+                new File(MainActivity.this.getFilesDir().toString() + "/ICERAPI.RES").delete();
+                new File(MainActivity.this.getFilesDir().toString() + "/ICERAPI.RES.OK").delete();
+                new File(MainActivity.this.getFilesDir().toString() + "/ICERAPI.REQ").delete();
+                new File(MainActivity.this.getFilesDir().toString() + "/ICERAPI.REQ.OK").delete();
+                File fileIni = new File(MainActivity.this.getFilesDir().toString() + "/ICERINI.xml");
+                if (!fileIni.exists()) {
+                    FileOutputStream fos = new FileOutputStream(fileIni.getAbsolutePath());
+                    String setting = "<CMAS_IP>211.78.134.165</CMAS_IP>\n" +
+                            "\n" +
+                            "<CMAS_Port>7200</CMAS_Port>\n" +
+                            "\n" +
+                            "<ReaderMode>4</ReaderMode>\n" +
+                            "\n" +
+                            "<ComPort2>/dev/ttyXRM1</Comport2>\n" +
+                            "\n" +
+                            "<TMLocationID>08790021</TMLocationID>\n" +
+                            "\n" +
+                            "<CMASMode>1</CMASMode>\n" +
+                            "\n" +
+                            "<ICERFlowDebug>0</ICERFlowDebug>\n" +
+                            "\n" +
+                            "<ReaderUartDebug>0</ReaderUartDebug>\n" +
+                            "\n" +
+                            "<MaxALAmt>10000</MaxALAmt>";
+                    // 将文本内容转换为字节数组
+                    byte[] bytes = setting.getBytes();
 
-    private void findAndOpenDevice() {
-        HashMap<String, UsbDevice> deviceList = usbManager.getDeviceList();
-        StringBuilder builder = new StringBuilder();
-        for (UsbDevice device : deviceList.values()) {
-            // Check if device matches your criteria
-            builder.append("VID:");
-            builder.append(device.getVendorId());
-            builder.append(",PID:");
-            builder.append(device.getProductId());
-            builder.append("\n");
-//            if (device.getVendorId() == 1659 && device.getProductId() == 8963) {
-//                this.device = device;
-//                // Request permission to access the device
-//                usbManager.requestPermission(device, permissionIntent);
-//                break;
-//            }
-        }
-        if (!builder.toString().isEmpty()) {
-            txtMachine.setText(builder.toString());
-        }
+                    // 写入文件内容
+                    fos.write(bytes);
+
+                    // 关闭文件输出流
+                    fos.close();
+                }
+                File fileData = new File(MainActivity.this.getFilesDir().toString() + "/ICERData");
+                if(!fileData.exists()){
+                    fileData.mkdir();
+                }
+                File fileBlc = new File(MainActivity.this.getFilesDir().toString() + "/ICERData/BlcFile");
+                if(!fileBlc.exists()){
+                    fileBlc.mkdir();
+                }
+                File fileReq = new File(MainActivity.this.getFilesDir().toString() + "/ICERData/ICERAPI.REQ");
+                fileReq.delete();
+//                FileOutputStream fosReq = new FileOutputStream(fileReq.getAbsolutePath());
+//                String req = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+//                        "<TransXML>\n" +
+//                        "  <TRANS>\n" +
+//                        "    <T0100>0200</T0100>\n" +
+//                        "    <T0300>296066</T0300>\n" +
+//                        "    <T0400>10000</T0400>\n" +
+//                        "    <T1100>100859</T1100>\n" +
+//                        "    <T1200>100859</T1200>\n" +
+//                        "    <T1300>20240510</T1300>\n" +
+//                        "    <T4108>0</T4108>\n" +
+//                        "    <T5501>24051000</T5501>\n" +
+//                        "  </TRANS>\n" +
+//                        "</TransXML>";
+//                // 将文本内容转换为字节数组
+//                byte[] bytesReq = req.getBytes();
+//
+//                // 写入文件内容
+//                fosReq.write(bytesReq);
+//
+//                // 关闭文件输出流
+//                fosReq.close();
+
+                File file = new File(MainActivity.this.getFilesDir().toString() + "/ICERData/ICERAPI.REQ.OK");
+                file.delete();
+//                if(!file.exists()){
+//                    boolean created = file.createNewFile();
+//                }
+
+                ICERAPI api = new ICERAPI(MainActivity.this.getFilesDir().toString(),
+                        Environment.getExternalStorageDirectory().getAbsolutePath(),
+                        MainActivity.this);
+
+                File fileRes = new File(MainActivity.this.getFilesDir().toString() + "/ICERAPI.RES");
+                if (fileRes.exists()) {
+                    // 打开文件读取器
+                    BufferedReader reader = new BufferedReader(new FileReader(fileRes.getAbsolutePath()));
+                    // 读取文件内容
+                    StringBuilder contentRet = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        contentRet.append(line).append("\n");
+                    }
+                    // 关闭文件读取器
+                    reader.close();
+
+                    // 输出文件内容
+                    System.out.println("File Content: " + contentRet.toString());
+                }
+                System.out.println();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     @Override
@@ -244,10 +331,93 @@ public class MainActivity extends AppCompatActivity {
         return bytes;
     }
 
+    public void invoiceIssueOffline(String merchantID, String machineID, String algorithm, String key, String IV) {
+        new Thread(() -> {
+            String no = EcpayFunction.getMachineInvoiceNumber(merchantID, machineID, algorithm, key, IV);
+            if (no != null) {
+                Date currentTime = Calendar.getInstance().getTime();
+                long unixTime = currentTime.getTime();
+                InvoiceDataOffline data = new InvoiceDataOffline();
+                data.setMerchantID(merchantID);
+                data.setRelateNumber("Samuel" + unixTime);
+                data.setCustomerID("");
+                data.setCustomerName("");
+                data.setCustomerAddr("");
+                data.setCustomerPhone("");
+                data.setCustomerEmail("");
+                data.setClearanceMark("");
+                data.setPrint("1");
+                data.setDonation("0");
+                data.setLoveCode("");
+                data.setCarrierType("");
+                data.setCarrierNum("");
+                data.setTaxType("1");
+                data.setSpecialTaxType("0");
+                data.setSalesAmount(30);
+                data.setInvType("07");
+                data.setVat("1");
+                data.setInvoiceRemark("Samuel1" + unixTime);
+                data.setItems(new EnvoiceItem[]{new EnvoiceItem()});
+                data.getItems()[0] = new EnvoiceItem();
+                data.getItems()[0].setItemSeq(1);
+                data.getItems()[0].setItemName("park");
+                data.getItems()[0].setItemCount(1);
+                data.getItems()[0].setItemWord("次");
+                data.getItems()[0].setItemPrice(30);
+                data.getItems()[0].setItemTaxType("1");
+                data.getItems()[0].setItemAmount(30);
+                data.getItems()[0].setItemRemark("one hour");
+                data.setMachineID(machineID);
+                data.setInvoiceNo(no);
+                data.setRandomNumber("0000");
+                String currentDate = EcpayFunction.getCurrentDateTime();
+                data.setInvoiceDate(currentDate);
+                EnvoiceJson json = new EnvoiceJson();
+                RqHeader header = new RqHeader();
+                header.setTimestamp(unixTime);
+
+                json.MerchantID = merchantID;
+                Gson gson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.IDENTITY).create();
+                json.RqHeader = header;
+                String dataString = gson.toJson(data);
+                json.Data = EcpayFunction.ECPayEncrypt(dataString, algorithm, key, IV);
+                String jsonText = gson.toJson(json);
+
+                try {
+                    String res = EcpayFunction.httpPost("https://einvoice-stage.ecpay.com.tw/B2CInvoice/OfflineIssue", jsonText, "UTF-8");
+                    if (res != null) {
+                        JSONObject ret = new JSONObject(res);
+                        if (!ret.getString("Data").isEmpty() && !ret.getString("Data").equals("null")) {
+                            JSONObject returnData = new JSONObject(EcpayFunction.ECPayDecrypt(ret.getString("Data"), algorithm, key, IV));
+                            if (returnData.getInt("RtnCode") == 1) {
+                                invoiceNo = returnData.getString("InvoiceNo");
+                                invoiceDate = currentDate.split(" ")[0];
+                                runOnUiThread(() -> {
+                                    txtInvoice.setText("發票號碼:" + invoiceNo);
+                                });
+                            } else {
+                                txtInvoice.setText("發票開立失敗");
+                            }
+                        }
+
+                    } else {
+                        runOnUiThread(() -> {
+                            txtInvoice.setText("發票開立失敗");
+                        });
+                    }
+                } catch (Exception ee) {
+                    ee.printStackTrace();
+                    runOnUiThread(() -> {
+                        txtInvoice.setText("發票開立失敗");
+                    });
+                }
+            }
+        }).start();
+    }
+
     public void invoiceIssue() {
         new Thread(() -> {
             Date currentTime = Calendar.getInstance().getTime();
-//            long unixTime = System.currentTimeMillis() / 1000L;
             long unixTime = currentTime.getTime();
             EnvoiceData data = new EnvoiceData();
             data.setMerchantID("2000132");
@@ -287,15 +457,14 @@ public class MainActivity extends AppCompatActivity {
             Gson gson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.UPPER_CAMEL_CASE).create();
             json.RqHeader = header;
             String dataString = gson.toJson(data);
-            json.Data = ECPayEncrypt(dataString);
+            json.Data = EcpayFunction.ECPayEncrypt(dataString, algorithm, key, IV);
             String jsonText = gson.toJson(json);
-            System.out.println(jsonText);
 
             try {
                 String res = EcpayFunction.httpPost("https://einvoice-stage.ecpay.com.tw/B2CInvoice/Issue", jsonText, "UTF-8");
                 if (res != null) {
                     JSONObject ret = new JSONObject(res);
-                    JSONObject returnData = new JSONObject(ECPayDecrypt(ret.getString("Data")));
+                    JSONObject returnData = new JSONObject(EcpayFunction.ECPayDecrypt(ret.getString("Data"), algorithm, key, IV));
                     invoiceNo = returnData.getString("InvoiceNo");
                     invoiceDate = returnData.getString("InvoiceDate").split(" ")[0];
                     if (invoiceNo.isEmpty() || invoiceDate.isEmpty()) {
@@ -321,7 +490,7 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    public void invoicePrint(String merchantID, String key, String IV, String invoiceNumber, String date) {
+    public void invoicePrint(String merchantID, String algorithm, String key, String IV, String invoiceNumber, String date) {
         if (invoiceNumber != null && date != null && !invoiceNumber.isEmpty() && !date.isEmpty()) {
             new Thread(() -> {
                 long unixTime = System.currentTimeMillis() / 1000L;
@@ -333,11 +502,11 @@ public class MainActivity extends AppCompatActivity {
                 data.setInvoiceNo(invoiceNumber);
                 data.setInvoiceDate(date);
                 data.setPrintStyle(3);
-                json.MerchantID = "2000132";
+                json.MerchantID = merchantID;
                 Gson gson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.UPPER_CAMEL_CASE).create();
                 json.RqHeader = header;
                 String dataString = gson.toJson(data);
-                json.Data = ECPayEncrypt(dataString);
+                json.Data = EcpayFunction.ECPayEncrypt(dataString, algorithm, key, IV);
                 String jsonText = gson.toJson(json);
                 System.out.println(jsonText);
 
@@ -345,7 +514,7 @@ public class MainActivity extends AppCompatActivity {
                     String res = EcpayFunction.httpPost("https://einvoice-stage.ecpay.com.tw/B2CInvoice/InvoicePrint", jsonText, "UTF-8");
                     if (res != null) {
                         JSONObject ret = new JSONObject(res);
-                        JSONObject returnData = new JSONObject(ECPayDecrypt(ret.getString("Data")));
+                        JSONObject returnData = new JSONObject(EcpayFunction.ECPayDecrypt(ret.getString("Data"), algorithm, key, IV));
                         String url = returnData.getString("InvoiceHtml");
                         if (!url.isEmpty()) {
                             runOnUiThread(() -> {
@@ -420,7 +589,7 @@ public class MainActivity extends AppCompatActivity {
             Gson gson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.UPPER_CAMEL_CASE).create();
             json.RqHeader = header;
             String dataString = gson.toJson(data);
-            json.Data = ECPayEncrypt(dataString);
+            json.Data = EcpayFunction.ECPayEncrypt(dataString, algorithm, key, IV);
             String jsonText = gson.toJson(json);
             System.out.println(jsonText);
 
@@ -428,7 +597,7 @@ public class MainActivity extends AppCompatActivity {
                 String res = EcpayFunction.httpPost("https://einvoice-stage.ecpay.com.tw/B2CInvoice/CheckBarcode", jsonText, "UTF-8");
                 if (res != null) {
                     JSONObject ret = new JSONObject(res);
-                    JSONObject returnData = new JSONObject(ECPayDecrypt(ret.getString("Data")));
+                    JSONObject returnData = new JSONObject(EcpayFunction.ECPayDecrypt(ret.getString("Data"), algorithm, key, IV));
                 }
             } catch (Exception ee) {
                 ee.printStackTrace();
@@ -449,7 +618,7 @@ public class MainActivity extends AppCompatActivity {
             Gson gson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.UPPER_CAMEL_CASE).create();
             json.RqHeader = header;
             String dataString = gson.toJson(data);
-            json.Data = ECPayEncrypt(dataString);
+            json.Data = EcpayFunction.ECPayEncrypt(dataString, algorithm, key, IV);
             String jsonText = gson.toJson(json);
             System.out.println(jsonText);
 
@@ -457,7 +626,7 @@ public class MainActivity extends AppCompatActivity {
                 String res = EcpayFunction.httpPost("https://einvoice-stage.ecpay.com.tw/B2CInvoice/GetCompanyNameByTaxID", jsonText, "UTF-8");
                 if (res != null) {
                     JSONObject ret = new JSONObject(res);
-                    JSONObject returnData = new JSONObject(ECPayDecrypt(ret.getString("Data")));
+                    JSONObject returnData = new JSONObject(EcpayFunction.ECPayDecrypt(ret.getString("Data"), algorithm, key, IV));
                 }
             } catch (Exception ee) {
                 ee.printStackTrace();
@@ -467,8 +636,66 @@ public class MainActivity extends AppCompatActivity {
 
     public void printMachineStatus() {
         if (cxt != null) {
-            byte[] status = new byte[]{0x10, 0x04, 0x04};
-            connector.WriteBytes(cxt, status, 0);
+            new Thread(() -> {
+                byte[] status = new byte[]{0x10, 0x04, 0x04};
+                connector.WriteBytes(cxt, status, 0);
+            }).start();
+        }
+    }
+
+    public void couponPrint(String text) throws UnsupportedEncodingException {
+        if (cxt != null) {
+            byte[] size = new byte[]{0x1D, 0x01, 0x03, 0x0A};
+            byte[] faultLevel = new byte[]{0x1D, 0x01, 0x04, 0x32};
+            byte[] length = new byte[]{0x1D, 0x01, 0x01, (byte) text.length(), 0x00};
+            byte[] print = new byte[]{0x1D, 0x01, 0x02};
+            byte[] line = new byte[]{0x0A};
+            byte[] content = new byte[text.length()];
+            for (int i = 0; i < text.length(); i++) {
+                content[i] = (byte) text.charAt(i);
+            }
+            byte[] init = new byte[]{0x1b, 0x21, 0x00, 0x1c, 0x21, 0x00, 0x1d, 0x21, 0x00, 0x1b, 0x56, 0x00, 0x1b, 0x40
+                    , 0x1c, 0x26, 0x1B, 0x17, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x01, 0x1D, 0x4C, 0x50, 0x00};
+            connector.WriteBytes(cxt, init, 0);
+//            connector.WriteBytes(cxt, PrintCommand.reset, 0);
+            //print title
+            byte[] titleSize = new byte[]{0x1d, 0x21, 0x22};
+            byte[] title = "XXXX優惠券".getBytes("Big5");
+            connector.WriteBytes(cxt, titleSize, 0);
+            connector.WriteBytes(cxt, title, 0);
+            connector.WriteBytes(cxt, line, 0);
+            //print QR code
+            connector.WriteBytes(cxt, size, 0);
+            connector.WriteBytes(cxt, faultLevel, 0);
+            connector.WriteBytes(cxt, length, 0);
+            connector.WriteBytes(cxt, content, 0);
+            connector.WriteBytes(cxt, PrintCommand.position50, 0);
+            connector.WriteBytes(cxt, print, 0);
+            connector.WriteBytes(cxt, line, 0);
+            //print deadline
+            byte[] deadlineSize = new byte[]{0x1d, 0x21, 0x11};
+            byte[] deadline = "折抵XX小時 (XX元)\n使用期限:24/05/18\n".getBytes("Big5");
+            connector.WriteBytes(cxt, deadlineSize, 0);
+            connector.WriteBytes(cxt, deadline, 0);
+            connector.WriteBytes(cxt, line, 0);
+            //print description
+            byte[] descriptionSize = new byte[]{0x1d, 0x21, 0x00};
+            byte[] description = ("使用說明:\n" +
+                    "1.折抵券只可使用一次\n" +
+                    "2.離場前請至自動繳費機折抵\n" +
+                    "3.繳完費請於XX分鐘內離場\n" +
+                    " (時間帶入B1設定值)\n" +
+                    "\n" +
+                    "2024/XX/XX  00:00\t(列印時間)\n" +
+                    "人員:xxxxxxx\t編號:000000\t序號:000000").getBytes("Big5");
+            connector.WriteBytes(cxt, descriptionSize, 0);
+            connector.WriteBytes(cxt, description, 0);
+
+            connector.WriteBytes(cxt, PrintCommand.blankA0, 0);
+            connector.WriteBytes(cxt, PrintCommand.cut, 0);
+            connector.WriteBytes(cxt, PrintCommand.rollback60, 0);
+            connector.WriteBytes(cxt, PrintCommand.rollForward05, 0);
+            connector.WriteBytes(cxt, PrintCommand.reset, 0);
         }
     }
 
@@ -514,7 +741,6 @@ public class MainActivity extends AppCompatActivity {
                     byte[] sendData = printDraw(scaledBitmap);
                     byte[] temp = new byte[8 + (targetWidth / 8)];
 
-                    connector.WriteBytes(cxt, PrintCommand.rollForward05, 0);
                     for (int i = 0; i < targetHeight; i++) {
                         if (i % 240 == 0) {
                             connector.WriteBytes(cxt, PrintCommand.reset, 0);
@@ -537,6 +763,7 @@ public class MainActivity extends AppCompatActivity {
                     connector.WriteBytes(cxt, PrintCommand.blank50, 0);
                     connector.WriteBytes(cxt, PrintCommand.cut, 0);
                     connector.WriteBytes(cxt, PrintCommand.rollback60, 0);
+                    connector.WriteBytes(cxt, PrintCommand.rollForward05, 0);
                     connector.WriteBytes(cxt, PrintCommand.reset, 0);
                 });
 
@@ -548,74 +775,6 @@ public class MainActivity extends AppCompatActivity {
                 txtInvoice.setText("can't find device");
             });
         }
-    }
-
-    private String encodeValue(String value) {
-        String code = null;
-        try {
-            code = URLEncoder.encode(value, "UTF-8");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return code;
-    }
-
-    private String decode(String value) {
-        String code = null;
-        try {
-            code = URLDecoder.decode(value, "UTF-8");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return code;
-    }
-
-    public static String encrypt(String algorithm, String input, SecretKeySpec key,
-                                 IvParameterSpec iv) {
-
-        try {
-            Cipher cipher = Cipher.getInstance(algorithm);
-            cipher.init(Cipher.ENCRYPT_MODE, key, iv);
-            byte[] cipherText = cipher.doFinal(input.getBytes());
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                return Base64.getEncoder()
-                        .encodeToString(cipherText);
-            } else {
-                return android.util.Base64.encodeToString(cipherText, 0);
-            }
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-
-    public static String decrypt(String algorithm, String cipherText, SecretKeySpec key,
-                                 IvParameterSpec iv) {
-
-        try {
-            Cipher cipher = Cipher.getInstance(algorithm);
-            cipher.init(Cipher.DECRYPT_MODE, key, iv);
-            byte[] plainText = new byte[0];
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                plainText = cipher.doFinal(Base64.getDecoder()
-                        .decode(cipherText));
-            } else {
-                plainText = cipher.doFinal(android.util.Base64.decode(cipherText, 0));
-            }
-            return new String(plainText);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    public String ECPayEncrypt(String data) {
-        String URLEncode = encodeValue(data);
-        return encrypt(algorithm, URLEncode, new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "AES"), new IvParameterSpec(IV.getBytes(StandardCharsets.UTF_8)));
-    }
-
-    public String ECPayDecrypt(String data) {
-        String aesDecrypt = decrypt(algorithm, data, new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "AES"), new IvParameterSpec(IV.getBytes(StandardCharsets.UTF_8)));
-        return decode(aesDecrypt);
     }
 
     public byte[] printDraw(Bitmap nbm) {
