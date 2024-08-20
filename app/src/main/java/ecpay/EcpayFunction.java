@@ -308,6 +308,56 @@ public class EcpayFunction {
         return term;
     }
 
+    public static MachineNumberInfo getMachineInvoiceNumberInfo(String merchantID, String machineID, String algorithm, String key, String IV) {
+        RqHeader header = new RqHeader();
+        header.setTimestamp(genUnixTimeStamp());
+        MachineNumberData data = new MachineNumberData();
+
+        data.setMerchantID(merchantID);
+        data.setInvoiceYear(getCurrentYear());
+        data.setInvoiceTerm(getCurrentTerm());
+        data.setInvoiceStatus(1);
+        data.setMachineID(machineID);
+        Gson gson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.UPPER_CAMEL_CASE).create();
+        String dataString = gson.toJson(data);
+
+        EnvoiceJson json = new EnvoiceJson();
+        json.MerchantID = merchantID;
+        json.RqHeader = header;
+        json.Data = EcpayFunction.ECPayEncrypt(dataString, algorithm, key, IV);
+
+        String jsonText = gson.toJson(json);
+        String res = EcpayFunction.httpPost("https://einvoice-stage.ecpay.com.tw/B2CInvoice/GetOfflineInvoiceWordSettingNumber", jsonText, "UTF-8");
+        if (res != null) {
+            try {
+                JSONObject ret = new JSONObject(res);
+                String reply = ret.getString("Data");
+                if (reply.isEmpty()) {
+                    return null;
+                }
+                JSONObject dataJson = new JSONObject(EcpayFunction.ECPayDecrypt(reply, algorithm, key, IV));
+                if (dataJson.getInt("RtnCode") == 1) {
+                    MachineNumberInfo info = new MachineNumberInfo();
+                    int times = dataJson.getInt("Times");
+                    JSONArray infos = new JSONArray(dataJson.getString("InvoiceInfo"));
+
+                    if (times > infos.length()) {
+                        return null;
+                    } else {
+                        JSONObject obj = infos.getJSONObject(times - 1);
+                        info.setInvoiceNumber(obj.getString("InvoiceNo"));
+                        info.setRandomNumber(obj.getString("RandomNumber"));
+                        return info;
+                    }
+                }
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return null;
+    }
+
     public static String getMachineInvoiceNumber(String merchantID, String machineID, String algorithm, String key, String IV) {
         RqHeader header = new RqHeader();
         header.setTimestamp(genUnixTimeStamp());

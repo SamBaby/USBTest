@@ -35,6 +35,7 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.constraintlayout)
     implementation(libs.gson)
+    implementation("com.github.mik3y:usb-serial-for-android:3.7.2")
     implementation(files("libs/icerapi.aar"))
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

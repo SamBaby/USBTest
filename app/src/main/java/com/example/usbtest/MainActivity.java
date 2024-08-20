@@ -10,6 +10,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Picture;
 import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -30,6 +31,10 @@ import androidx.core.content.ContextCompat;
 import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.driver.UsbSerialPort;
+import com.hoho.android.usbserial.driver.UsbSerialProber;
+import com.hoho.android.usbserial.util.SerialInputOutputManager;
 
 import org.json.JSONObject;
 
@@ -44,6 +49,9 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 
 import ecpay.BarcodeCheckJson;
 import ecpay.EcpayFunction;
@@ -52,8 +60,10 @@ import ecpay.EnvoiceItem;
 import ecpay.EnvoiceJson;
 import ecpay.InvoiceDataOffline;
 import ecpay.InvoicePrintJson;
+import ecpay.MachineNumberInfo;
 import ecpay.RqHeader;
 import ecpay.TaxIDCheckJson;
+import ez_card.ICERAPIRequest;
 import icerapi.icerapi.ICERAPI;
 import invoice_print_machine.PrintCommand;
 import usb.UsbConnectionContext;
@@ -95,7 +105,6 @@ public class MainActivity extends AppCompatActivity {
     private String invoiceNo;
     private String invoiceDate;
 
-    @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -140,7 +149,7 @@ public class MainActivity extends AppCompatActivity {
                     new Thread(() -> {
                         while (reading) {
                             try {
-                                byte[] bytes = connector.ReadBytes(cxt, 2, 10000);
+                                byte[] bytes = connector.ReadBytes(cxt, 2, 50);
                                 if (bytes != null && bytes.length > 0) {
                                     String s = byteArrayToHexStr(bytes);
                                     runOnUiThread(() -> txtInput.setText("Input from USB: " + s));
@@ -165,22 +174,22 @@ public class MainActivity extends AppCompatActivity {
                 txtConnect.setBackgroundColor(Color.RED);
             });
         });
-        btnSend.setOnClickListener(v -> {
-            String txt = txtOutput.getText().toString();
-            if (cxt != null && !txt.isEmpty()) {
-                try {
-                    byte[] bytes = hexToByte(txt);
-                    connector.WriteBytes(cxt, bytes, 10000);
-                } catch (Exception e) {
-                    runOnUiThread(() -> {
-                        txtMachine.setText("Sending: " + e.toString());
-                    });
-                }
-            }
-        });
+//        btnSend.setOnClickListener(v -> {
+//            String txt = txtOutput.getText().toString();
+//            if (cxt != null && !txt.isEmpty()) {
+//                try {
+//                    byte[] bytes = hexToByte(txt);
+//                    connector.WriteBytes(cxt, bytes, 10000);
+//                } catch (Exception e) {
+//                    runOnUiThread(() -> {
+//                        txtMachine.setText("Sending: " + e.toString());
+//                    });
+//                }
+//            }
+//        });
         btnInvoiceIssue.setOnClickListener(v -> {
-//            invoiceIssue();
-            invoiceIssueOffline("3085340", "SM01", algorithm, "HwiqPsywG1hLQNuN", "YqITWD4TyKacYXpn");
+            invoiceIssue();
+//            invoiceIssueOffline("3085340", "SM01", algorithm, "HwiqPsywG1hLQNuN", "YqITWD4TyKacYXpn");
         });
         btnInvoicePrint.setOnClickListener(v -> {
             invoicePrint("3085340", algorithm, "HwiqPsywG1hLQNuN", "YqITWD4TyKacYXpn", invoiceNo, invoiceDate);
@@ -191,41 +200,78 @@ public class MainActivity extends AppCompatActivity {
         btnStatus.setOnClickListener(v -> {
             printMachineStatus();
         });
-        Button btnCoupon = findViewById(R.id.coupon_button);
-        btnCoupon.setOnClickListener(v -> {
-            try {
-                couponPrint("http://www.google.com");
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
+//        Button btnCoupon = findViewById(R.id.coupon_button);
+//        btnCoupon.setOnClickListener(v -> {
+//            try {
+//                couponPrint("http://www.google.com");
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+//        });
         Button btnICER = findViewById(R.id.icer_connect_button);
         btnICER.setOnClickListener(v -> {
             try {
                 new File(MainActivity.this.getFilesDir().toString() + "/ICERAPI.RES").delete();
                 new File(MainActivity.this.getFilesDir().toString() + "/ICERAPI.RES.OK").delete();
-                new File(MainActivity.this.getFilesDir().toString() + "/ICERAPI.REQ").delete();
-                new File(MainActivity.this.getFilesDir().toString() + "/ICERAPI.REQ.OK").delete();
+                new File(MainActivity.this.getFilesDir().toString() + "/ICERData/ICERAPI.REQ").delete();
+                new File(MainActivity.this.getFilesDir().toString() + "/ICERData/ICERAPI.REQ.OK").delete();
                 File fileIni = new File(MainActivity.this.getFilesDir().toString() + "/ICERINI.xml");
                 if (!fileIni.exists()) {
                     FileOutputStream fos = new FileOutputStream(fileIni.getAbsolutePath());
-                    String setting = "<CMAS_IP>211.78.134.165</CMAS_IP>\n" +
-                            "\n" +
-                            "<CMAS_Port>7200</CMAS_Port>\n" +
-                            "\n" +
-                            "<ReaderMode>4</ReaderMode>\n" +
-                            "\n" +
-                            "<ComPort2>/dev/ttyXRM1</Comport2>\n" +
-                            "\n" +
-                            "<TMLocationID>08790021</TMLocationID>\n" +
-                            "\n" +
-                            "<CMASMode>1</CMASMode>\n" +
-                            "\n" +
-                            "<ICERFlowDebug>0</ICERFlowDebug>\n" +
-                            "\n" +
-                            "<ReaderUartDebug>0</ReaderUartDebug>\n" +
-                            "\n" +
-                            "<MaxALAmt>10000</MaxALAmt>";
+                    String setting = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+                            "<TransXML>\n" +
+                            "  <LogFlag>1</LogFlag>\n" +
+                            "  <DLLVersion>2</DLLVersion>\n" +
+                            "  <TCPIPTimeOut>30</TCPIPTimeOut>\n" +
+                            "  <LogCnt>30</LogCnt>\n" +
+                            "  <ComPort>1</ComPort>\n" +
+                            "  <ComPort2>/dev/ttyXRM1</ComPort2>\n" +
+                            "  <ECC_IP>172.16.11.20</ECC_IP>\n" +
+                            "  <ECC_Port>8901</ECC_Port>\n" +
+                            "  <ICER_IP>172.25.17.95</ICER_IP>\n" +
+                            "  <ICER_Port>8303</ICER_Port>\n" +
+                            "  <CMAS_IP>211.78.134.165</CMAS_IP>\n" +
+                            "  <CMAS_Port>7100</CMAS_Port>\n" +
+                            "  <TMLocationID>08790021</TMLocationID>\n" +
+                            "  <TMID>01</TMID>\n" +
+                            "  <TMAgentNumber>0001</TMAgentNumber>\n" +
+                            "  <LocationID>0</LocationID>\n" +
+                            "  <NewLocationID>0</NewLocationID>\n" +
+                            "  <SPID>0</SPID>\n" +
+                            "  <NewSPID>08150000</NewSPID>\n" +
+                            "  <Slot>11</Slot>\n" +
+                            "  <BaudRate>115200</BaudRate>\n" +
+                            "  <OpenCom>4</OpenCom>\n" +
+                            "  <MustSettleDate>10</MustSettleDate>\n" +
+                            "  <ReaderMode>4</ReaderMode>\n" +
+                            "  <BatchFlag>1</BatchFlag>\n" +
+                            "  <OnlineFlag>1</OnlineFlag>\n" +
+                            "  <ICERDataFlag>1</ICERDataFlag>\n" +
+                            "  <MessageHeader>99909020</MessageHeader>\n" +
+                            "  <DLLMode>0</DLLMode>\n" +
+                            "  <AutoLoadMode>1</AutoLoadMode>\n" +
+                            "  <MaxALAmt>10000</MaxALAmt>\n" +
+                            "  <Dev_Info>1122334455</Dev_Info>\n" +
+                            "  <TCPIP_SSL>1</TCPIP_SSL>\n" +
+                            "  <CMASAdviceVerify>0</CMASAdviceVerify>\n" +
+                            "  <AutoSignOnPercnet>0</AutoSignOnPercnet>\n" +
+                            "  <AutoLoadFunction>0</AutoLoadFunction>\n" +
+                            "  <VerificationCode>0</VerificationCode>\n" +
+                            "  <ReSendReaderAVR>0</ReSendReaderAVR>\n" +
+                            "  <XMLHeaderFlag>1</XMLHeaderFlag>\n" +
+                            "  <FolderCreatFlag>1</FolderCreatFlag>\n" +
+                            "  <BLCName>BLC05244A_180327.BIG</BLCName>\n" +
+                            "  <CMASMode>1</CMASMode>\n" +
+                            "  <POS_ID>0</POS_ID>\n" +
+                            "  <AdditionalTcpipData>0</AdditionalTcpipData>\n" +
+                            "  <PacketLenFlag>0</PacketLenFlag>\n" +
+                            "  <CRT_FileName>\n" +
+                            "  </CRT_FileName>\n" +
+                            "  <Key_FileName>\n" +
+                            "  </Key_FileName>\n" +
+                            "  <ICERFlowDebug>0</ICERFlowDebug>\n" +
+                            "  <ReaderUartDebug>0</ReaderUartDebug>\n" +
+                            "</TransXML>";
                     // 将文本内容转换为字节数组
                     byte[] bytes = setting.getBytes();
 
@@ -236,43 +282,31 @@ public class MainActivity extends AppCompatActivity {
                     fos.close();
                 }
                 File fileData = new File(MainActivity.this.getFilesDir().toString() + "/ICERData");
-                if(!fileData.exists()){
+                if (!fileData.exists()) {
                     fileData.mkdir();
                 }
                 File fileBlc = new File(MainActivity.this.getFilesDir().toString() + "/ICERData/BlcFile");
-                if(!fileBlc.exists()){
+                if (!fileBlc.exists()) {
                     fileBlc.mkdir();
                 }
                 File fileReq = new File(MainActivity.this.getFilesDir().toString() + "/ICERData/ICERAPI.REQ");
                 fileReq.delete();
-//                FileOutputStream fosReq = new FileOutputStream(fileReq.getAbsolutePath());
-//                String req = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
-//                        "<TransXML>\n" +
-//                        "  <TRANS>\n" +
-//                        "    <T0100>0200</T0100>\n" +
-//                        "    <T0300>296066</T0300>\n" +
-//                        "    <T0400>10000</T0400>\n" +
-//                        "    <T1100>100859</T1100>\n" +
-//                        "    <T1200>100859</T1200>\n" +
-//                        "    <T1300>20240510</T1300>\n" +
-//                        "    <T4108>0</T4108>\n" +
-//                        "    <T5501>24051000</T5501>\n" +
-//                        "  </TRANS>\n" +
-//                        "</TransXML>";
-//                // 将文本内容转换为字节数组
-//                byte[] bytesReq = req.getBytes();
-//
-//                // 写入文件内容
-//                fosReq.write(bytesReq);
-//
-//                // 关闭文件输出流
-//                fosReq.close();
+                ICERAPIRequest req = new ICERAPIRequest("24051400");
+                FileOutputStream fosReq = new FileOutputStream(fileReq.getAbsolutePath());
+                // 将文本内容转换为字节数组
+                byte[] bytesReq = req.queryRequest(null, null).getBytes();
+
+                // 写入文件内容
+                fosReq.write(bytesReq);
+
+                // 关闭文件输出流
+                fosReq.close();
 
                 File file = new File(MainActivity.this.getFilesDir().toString() + "/ICERData/ICERAPI.REQ.OK");
                 file.delete();
-//                if(!file.exists()){
-//                    boolean created = file.createNewFile();
-//                }
+                if (!file.exists()) {
+                    boolean created = file.createNewFile();
+                }
 
                 ICERAPI api = new ICERAPI(MainActivity.this.getFilesDir().toString(),
                         Environment.getExternalStorageDirectory().getAbsolutePath(),
@@ -333,8 +367,10 @@ public class MainActivity extends AppCompatActivity {
 
     public void invoiceIssueOffline(String merchantID, String machineID, String algorithm, String key, String IV) {
         new Thread(() -> {
-            String no = EcpayFunction.getMachineInvoiceNumber(merchantID, machineID, algorithm, key, IV);
-            if (no != null) {
+            MachineNumberInfo info = EcpayFunction.getMachineInvoiceNumberInfo(merchantID, machineID, algorithm, key, IV);
+            if (info != null) {
+                String no = info.getInvoiceNumber();
+                String randomNo = info.getRandomNumber();
                 Date currentTime = Calendar.getInstance().getTime();
                 long unixTime = currentTime.getTime();
                 InvoiceDataOffline data = new InvoiceDataOffline();
@@ -369,7 +405,7 @@ public class MainActivity extends AppCompatActivity {
                 data.getItems()[0].setItemRemark("one hour");
                 data.setMachineID(machineID);
                 data.setInvoiceNo(no);
-                data.setRandomNumber("0000");
+                data.setRandomNumber(randomNo);
                 String currentDate = EcpayFunction.getCurrentDateTime();
                 data.setInvoiceDate(currentDate);
                 EnvoiceJson json = new EnvoiceJson();

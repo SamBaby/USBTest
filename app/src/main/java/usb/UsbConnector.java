@@ -146,6 +146,8 @@ public class UsbConnector {
             builder.append(device.getVendorId());
             builder.append(",PID:");
             builder.append(device.getProductId());
+            builder.append(",interface:");
+            builder.append(device.getInterfaceCount());
             builder.append("\n");
             if (device.getVendorId() == vendorId && device.getProductId() == productId) {
                 ctx.mUsbDevice = device;

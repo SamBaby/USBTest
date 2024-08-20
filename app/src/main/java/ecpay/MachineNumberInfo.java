@@ -5,6 +5,9 @@ public class MachineNumberInfo {
     private String InvoiceStart;
     private String InvoiceEnd;
     private int Times;
+    private String RandomNumber;
+    private String InvoiceNumber;
+
 
     public String getInvoiceHeader() {
         return InvoiceHeader;
@@ -36,5 +39,21 @@ public class MachineNumberInfo {
 
     public void setTimes(int times) {
         Times = times;
+    }
+
+    public String getRandomNumber() {
+        return RandomNumber;
+    }
+
+    public void setRandomNumber(String randomNumber) {
+        RandomNumber = randomNumber;
+    }
+
+    public String getInvoiceNumber() {
+        return InvoiceNumber;
+    }
+
+    public void setInvoiceNumber(String invoiceNumber) {
+        InvoiceNumber = invoiceNumber;
     }
 }
